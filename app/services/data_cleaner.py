@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import os
+from sklearn.preprocessing import LabelEncoder
+import itertools
 
 def read_file(file_path, file_type):
     """读取数据文件"""
@@ -10,34 +12,6 @@ def read_file(file_path, file_type):
         return pd.read_excel(file_path)
     else:
         raise ValueError(f"不支持的文件类型: {file_type}")
-
-def preview_data(file_path=None, n_rows=5):
-    """
-    模拟预览数据文件（简化版）
-    """
-    # 返回模拟数据
-    sample_data = pd.DataFrame({
-        'col1': [1, 2, 3, 4, 5],
-        'col2': ['a', 'b', 'c', 'd', 'e']
-    })
-    
-    info = {
-        'columns': ['col1', 'col2'],
-        'shape': (5, 2),
-        'dtypes': {'col1': 'int64', 'col2': 'object'}
-    }
-    
-    return sample_data, info
-
-def clean_data(file_path=None, na_strategy='drop', numeric_cols=None, categorical_cols=None):
-    """
-    模拟清洗数据（简化版）
-    """
-    # 返回模拟清洗后的数据
-    return pd.DataFrame({
-        'col1': [1, 2, 3, 4, 5],
-        'col2': ['a', 'b', 'c', 'd', 'e']
-    })
 
 def preview_data(file_path, file_type, rows=10):
     """预览数据，返回前几行、总行数和列信息"""
@@ -63,6 +37,9 @@ def preview_data(file_path, file_type, rows=10):
                 'unique_count': int(df[col].nunique())
             })
         
+        # 将 NaN 值替换为 None，这样在 JSON 序列化时会变成 null
+        df = df.replace({np.nan: None})
+        
         # 转换为列表形式，便于JSON序列化
         preview_data = df.head(rows).to_dict(orient='records')
         
@@ -75,6 +52,7 @@ def clean_data(file_path, file_type, operations):
     try:
         df = read_file(file_path, file_type)
         original_count = len(df)
+        original_columns = list(df.columns)
         
         for op in operations:
             op_type = op.get('type')
@@ -89,7 +67,10 @@ def clean_data(file_path, file_type, operations):
                 method = op.get('method', 'mean')
                 value = op.get('value')
                 
-                if method == 'mean' and pd.api.types.is_numeric_dtype(df[column]):
+                if method == 'drop':
+                    # 删除含有缺失值的行
+                    df = df.dropna(subset=[column])
+                elif method == 'mean' and pd.api.types.is_numeric_dtype(df[column]):
                     df[column] = df[column].fillna(df[column].mean())
                 elif method == 'median' and pd.api.types.is_numeric_dtype(df[column]):
                     df[column] = df[column].fillna(df[column].median())
@@ -102,6 +83,36 @@ def clean_data(file_path, file_type, operations):
                 # 删除包含缺失值的行
                 df = df.dropna(subset=[column])
                 
+            elif op_type == 'drop_duplicates':
+                # 删除重复行
+                columns = op.get('columns', [])
+                keep = op.get('keep', 'first')
+                
+                if columns:
+                    df = df.drop_duplicates(subset=columns, keep=keep)
+                else:
+                    df = df.drop_duplicates(keep=keep)
+                    
+            elif op_type == 'handle_outliers':
+                # 处理异常值
+                if pd.api.types.is_numeric_dtype(df[column]):
+                    method = op.get('method', 'drop')
+                    threshold = op.get('threshold', 1.5)
+                    
+                    # 计算IQR和异常值边界
+                    Q1 = df[column].quantile(0.25)
+                    Q3 = df[column].quantile(0.75)
+                    IQR = Q3 - Q1
+                    lower_bound = Q1 - threshold * IQR
+                    upper_bound = Q3 + threshold * IQR
+                    
+                    if method == 'drop':
+                        # 删除异常值
+                        df = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
+                    elif method == 'cap':
+                        # 截断异常值
+                        df[column] = df[column].clip(lower=lower_bound, upper=upper_bound)
+                    
             elif op_type == 'remove_outliers':
                 # 移除异常值 (使用IQR方法)
                 if pd.api.types.is_numeric_dtype(df[column]):
@@ -123,25 +134,61 @@ def clean_data(file_path, file_type, operations):
                     
                 elif method == 'label':
                     # 标签编码
-                    from sklearn.preprocessing import LabelEncoder
                     le = LabelEncoder()
                     df[column] = le.fit_transform(df[column])
         
-        # 保存清洗后的数据
-        cleaned_path = file_path.replace('.', '_cleaned.')
+        # 计算行列变化情况
+        cleaned_count = len(df)
+        removed_count = original_count - cleaned_count
+        column_count = len(df.columns)
+        added_column_count = len(df.columns) - len(original_columns)
         
+        # 创建备份文件（但不作为主要修改文件）
+        backup_path = file_path + '.bak'
+        if not os.path.exists(backup_path):
+            if file_type == 'csv':
+                read_file(file_path, file_type).to_csv(backup_path, index=False)
+            else:
+                read_file(file_path, file_type).to_excel(backup_path, index=False)
+        
+        # 直接保存到原始文件
         if file_type == 'csv':
-            df.to_csv(cleaned_path, index=False)
+            df.to_csv(file_path, index=False)
         else:
-            df.to_excel(cleaned_path, index=False)
+            df.to_excel(file_path, index=False)
+            
+        # 将 NaN 值替换为 None，这样在 JSON 序列化时会变成 null
+        df_preview = df.replace({np.nan: None})
+        
+        # 获取列信息 (与 preview_data 函数返回格式保持一致)
+        columns_info = []
+        for col in df.columns:
+            dtype = str(df[col].dtype)
+            # 判断数据类型
+            if np.issubdtype(df[col].dtype, np.number):
+                data_type = 'numeric'
+            elif dtype == 'object':
+                data_type = 'categorical'
+            else:
+                data_type = 'other'
+                
+            columns_info.append({
+                'name': col,
+                'type': data_type,
+                'missing_count': int(df[col].isna().sum()),
+                'unique_count': int(df[col].nunique())
+            })
             
         # 返回清洗后的预览和统计信息
         return {
             'success': True,
-            'preview': df.head(10).to_dict(orient='records'),
+            'preview': df_preview.head(10).to_dict(orient='records'),
             'original_count': original_count,
-            'cleaned_count': len(df),
-            'removed_count': original_count - len(df)
+            'cleaned_count': cleaned_count,
+            'removed_count': removed_count,
+            'column_count': column_count,
+            'added_column_count': added_column_count,
+            'columns': columns_info
         }
     except Exception as e:
         return {
@@ -213,6 +260,48 @@ def detect_outliers(df):
     
     return suggestions
 
+def detect_duplicates(df):
+    """检测重复数据并生成清洗建议"""
+    suggestions = []
+    
+    # 检查整行重复
+    duplicate_rows = df.duplicated().sum()
+    if duplicate_rows > 0:
+        duplicate_ratio = duplicate_rows / len(df)
+        priority = 'high' if duplicate_ratio > 0.05 else 'medium'
+        
+        suggestions.append({
+            'type': 'drop_duplicates',
+            'columns': [],  # 空列表表示检查所有列
+            'keep': 'first',
+            'reason': f'发现{duplicate_rows}行完全重复数据 ({duplicate_ratio:.2%})',
+            'priority': priority
+        })
+    
+    # 检查特定列组合的重复
+    # 针对分类型和ID型特征列查找可能的重复
+    categorical_columns = [col for col in df.columns if df[col].dtype == 'object' and df[col].nunique() < len(df) * 0.5]
+    
+    # 尝试常见的ID列名
+    id_columns = [col for col in df.columns if 'id' in col.lower() or 'key' in col.lower() or 'code' in col.lower()]
+    
+    # 组合这些列查找重复
+    columns_to_check = categorical_columns + id_columns
+    if len(columns_to_check) > 1 and len(columns_to_check) < 5:  # 只检查少量列的组合，避免计算太复杂
+        for i in range(2, min(4, len(columns_to_check) + 1)):
+            for columns_combo in itertools.combinations(columns_to_check, i):
+                duplicate_count = df.duplicated(subset=list(columns_combo)).sum()
+                if duplicate_count > 0:
+                    suggestions.append({
+                        'type': 'drop_duplicates',
+                        'columns': list(columns_combo),
+                        'keep': 'first',
+                        'reason': f'在列 {", ".join(columns_combo)} 中发现{duplicate_count}条重复记录',
+                        'priority': 'medium'
+                    })
+    
+    return suggestions
+
 def auto_suggest_cleaning(file_path, file_type):
     """自动分析数据并提供清洗建议"""
     try:
@@ -223,6 +312,10 @@ def auto_suggest_cleaning(file_path, file_type):
         # 检测缺失值
         missing_suggestions = detect_missing_values(df)
         suggestions.extend(missing_suggestions)
+        
+        # 检测重复数据
+        duplicate_suggestions = detect_duplicates(df)
+        suggestions.extend(duplicate_suggestions)
         
         # 检测异常值
         outlier_suggestions = detect_outliers(df)

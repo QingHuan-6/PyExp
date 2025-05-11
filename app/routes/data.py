@@ -7,7 +7,8 @@ from werkzeug.utils import secure_filename
 from app import db
 from app.models.dataset import Dataset
 from app.routes import data_bp
-from app.services.data_cleaner import preview_data, clean_data, auto_suggest_cleaning
+from app.services.data_cleaner import preview_data, clean_data
+import numpy as np
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -149,7 +150,10 @@ def get_dataset(dataset_id):
     
     # 读取数据预览
     preview, _, _ = preview_data(dataset.file_path, dataset.file_type)
-    
+    print("返回数据集详情:", {
+        'dataset': dataset.to_dict(),
+        'preview': preview
+    })
     return jsonify({
         'dataset': dataset.to_dict(),
         'preview': preview
@@ -173,25 +177,38 @@ def clean_dataset(dataset_id):
     if result['success']:
         # 更新数据集状态
         dataset.cleaned = True
+        dataset.row_count = result['cleaned_count']
+        
+        # 确保列信息是JSON格式，与preview_data保持一致
+        if 'columns' in result and isinstance(result['columns'], list):
+            dataset.columns = json.dumps(result['columns'])
+        
         db.session.commit()
         
         return jsonify({
+            'success': True,
             'message': '数据清洗成功',
-            'preview': result['preview']
+            'preview': result['preview'],
+            'original_count': result['original_count'],
+            'cleaned_count': result['cleaned_count'],
+            'removed_count': result['removed_count'],
+            'column_count': result['column_count'],
+            'added_column_count': result['added_column_count'],
+            'columns': result.get('columns', [])
         })
     
     return jsonify({'error': result['error']}), 400
 
-@data_bp.route('/datasets/<int:dataset_id>/suggest', methods=['GET'])
+@data_bp.route('/datasets/<int:dataset_id>/clean-suggestions', methods=['GET'])
 @login_required
-def suggest_cleaning(dataset_id):
+def get_clean_suggestions(dataset_id):
     dataset = Dataset.query.get_or_404(dataset_id)
     
     # 检查权限
     if dataset.user_id != current_user.id:
         return jsonify({'error': '无权访问该数据集'}), 403
     
-    # 生成清洗建议
+    # 获取清洗建议
     result = auto_suggest_cleaning(dataset.file_path, dataset.file_type)
     
     if result['success']:
@@ -201,6 +218,49 @@ def suggest_cleaning(dataset_id):
         })
     
     return jsonify({'error': result['error']}), 400
+
+@data_bp.route('/datasets/<int:dataset_id>/apply-suggestion', methods=['POST'])
+@login_required
+def apply_clean_suggestion(dataset_id):
+    dataset = Dataset.query.get_or_404(dataset_id)
+    
+    # 检查权限
+    if dataset.user_id != current_user.id:
+        return jsonify({'error': '无权访问该数据集'}), 403
+    
+    data = request.get_json()
+    suggestion = data.get('suggestion', {})
+    
+    # 将建议转换为操作
+    operations = [suggestion]
+    
+    # 执行清洗操作
+    result = clean_data(dataset.file_path, dataset.file_type, operations)
+    
+    if result['success']:
+        # 更新数据集状态
+        dataset.cleaned = True
+        dataset.row_count = result['cleaned_count']
+        
+        # 确保列信息是JSON格式，与preview_data保持一致
+        if 'columns' in result and isinstance(result['columns'], list):
+            dataset.columns = json.dumps(result['columns'])
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '数据清洗成功',
+            'preview': result['preview'],
+            'original_count': result['original_count'],
+            'cleaned_count': result['cleaned_count'],
+            'removed_count': result['removed_count'],
+            'column_count': result['column_count'],
+            'added_column_count': result['added_column_count'],
+            'columns': result.get('columns', [])
+        })
+    
+    return jsonify({'success': False, 'error': result['error']}), 400
 
 @data_bp.route('/datasets/<int:dataset_id>/full', methods=['GET'])
 @login_required
@@ -229,6 +289,9 @@ def get_full_dataset(dataset_id):
             df = pd.read_excel(dataset.file_path)
         else:
             return jsonify({'success': False, 'error': f'不支持的文件类型: {file_type}'}), 400
+        
+        # 将NaN值替换为None，这样在JSON序列化时会变成null
+        df = df.replace({np.nan: None})
         
         # 将DataFrame转换为字典列表
         records = df.to_dict(orient='records')

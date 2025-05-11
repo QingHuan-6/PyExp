@@ -6,7 +6,7 @@ class Config:
     
     # 数据库配置 - 修改为MySQL
     # 格式: mysql+pymysql://username:password@host:port/database_name
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'mysql+pymysql://root:S30W24j05@localhost:3306/house_price'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'mysql+pymysql://root:123456@localhost:3306/house_price'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # 上传文件配置

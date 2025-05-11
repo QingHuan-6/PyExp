@@ -5,6 +5,7 @@ import Register from '../views/Register.vue'
 import Dashboard from '../views/Dashboard.vue'
 import DatasetDetail from '../views/DatasetDetail.vue'
 import DataAnalysis from '../views/DataAnalysis.vue'
+import DataVisualization from '../views/DataVisualization.vue'
 import store from '../store'
 
 const routes = [
@@ -55,6 +56,12 @@ const routes = [
         next('/dashboard');
       }
     }
+  },
+  {
+    path: '/data-visualization/:id',
+    name: 'DataVisualization',
+    component: DataVisualization,
+    meta: { requiresAuth: true }
   }
 ]
 

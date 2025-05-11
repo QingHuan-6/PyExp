@@ -106,17 +106,30 @@ export default createStore({
     
     async fetchDataset({ commit }, datasetId) {
       try {
-        const response = await axios.get(`/data/datasets/${datasetId}`)
-        commit('setCurrentDataset', response.data.dataset)
-        return { 
-          success: true, 
-          preview: response.data.preview 
+        const response = await axios.get(`/data/datasets/${datasetId}`);
+        const data = response.data;
+        
+        if (data && data.dataset) {
+          commit('setCurrentDataset', data.dataset);
+          return {
+            success: true,
+            dataset: data.dataset,
+            preview: data.preview || []
+          };
         }
+        
+        return { 
+          success: false, 
+          error: '服务器返回的数据格式不正确' 
+        };
       } catch (error) {
-        return { success: false, error: '获取数据集详情失败' }
+        console.error('获取数据集详情失败:', error);
+        return { 
+          success: false, 
+          error: error.response?.data?.error || '获取数据集详情失败' 
+        };
       }
     },
-    
     async uploadDataset({ commit, state }, { file, description }) {
       try {
         console.log('开始上传文件:', file.name);
@@ -191,7 +204,10 @@ export default createStore({
             preview: response.data.preview || [],
             original_count: response.data.original_count,
             cleaned_count: response.data.cleaned_count,
-            removed_count: response.data.removed_count
+            removed_count: response.data.removed_count,
+            column_count: response.data.column_count,
+            added_column_count: response.data.added_column_count,
+            columns: response.data.columns
           };
         }
         return { success: false, error: '服务器返回数据格式不正确' };
