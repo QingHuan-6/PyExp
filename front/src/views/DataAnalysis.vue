@@ -545,6 +545,23 @@ export default {
       }
     }
   },
+  created() {
+    // 全局错误处理器
+    this.errorHandler = (error) => {
+      if (error.response && error.response.status === 404) {
+        this.handleNotFoundError(error);
+        return true; // 表示已处理
+      }
+      return false; // 未处理，交给默认处理器
+    };
+    
+    // 注册全局错误处理器
+    this.$root.$on('error', this.errorHandler);
+  },
+  beforeUnmount() {
+    // 移除全局错误处理器
+    this.$root.$off('error', this.errorHandler);
+  },
   methods: {
     async fetchDataset() {
       this.loading = true
@@ -552,16 +569,37 @@ export default {
       try {
         const result = await this.$store.dispatch('fetchDataset', this.datasetId)
         
-        if (result.success) {
-          this.columns = JSON.parse(this.dataset.columns)
+        if (result && result.success) {
+          // 确保dataset和columns都存在
+          if (this.dataset && this.dataset.columns) {
+            try {
+              this.columns = JSON.parse(this.dataset.columns)
+            } catch (e) {
+              console.error('解析列数据失败:', e)
+              this.columns = []
+            }
+          } else {
+            console.warn('数据集或列信息不存在')
+            this.columns = []
+          }
           
           // 如果是预测标签，加载历史预测
           if (this.activeTab === 'prediction') {
             this.fetchPredictions()
           }
+        } else {
+          console.warn('获取数据集返回错误:', result?.error || '未知错误')
+          this.columns = []
         }
       } catch (err) {
         console.error('获取数据集失败', err)
+        this.columns = []
+        
+        // 处理404错误
+        if (err.response && err.response.status === 404) {
+          alert('数据集不存在或已被删除')
+          this.$router.push('/dashboard')
+        }
       } finally {
         this.loading = false
       }
@@ -608,16 +646,21 @@ export default {
       try {
         const result = await this.$store.dispatch('getPredictions', this.datasetId)
         
-        if (result.success) {
-          this.predictions = result.predictions
+        if (result && result.success) {
+          this.predictions = result.predictions || []
           
           // 如果有预测记录，默认选择第一个
           if (this.predictions.length > 0) {
             this.selectPrediction(this.predictions[0])
           }
+        } else {
+          // 增加错误处理
+          console.warn('获取预测记录返回非成功状态:', result)
+          this.predictions = []
         }
       } catch (err) {
         console.error('获取预测记录失败', err)
+        this.predictions = [] // 确保失败时也设置为空数组
       } finally {
         this.loadingPredictions = false
       }
@@ -672,6 +715,18 @@ export default {
       
       // 显示3位小数
       return value.toFixed(3)
+    },
+    
+    handleNotFoundError(error) {
+      console.warn('API端点未找到:', error.config.url);
+      
+      if (error.config.url.includes('/predictions')) {
+        // 预测API不存在时的处理
+        this.loadingPredictions = false;
+        this.predictions = [];
+        // 可选：显示友好提示
+        this.predictionError = "预测功能暂不可用，请稍后再试";
+      }
     }
   }
 }

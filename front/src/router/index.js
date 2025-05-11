@@ -41,7 +41,20 @@ const routes = [
     path: '/analysis/:id',
     name: 'DataAnalysis',
     component: DataAnalysis,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true },
+    beforeEnter: async (to, from, next) => {
+      try {
+        // 在进入分析页面前先加载数据集
+        const datasetId = Number(to.params.id);
+        if (!store.getters.currentDataset || store.getters.currentDataset.id !== datasetId) {
+          await store.dispatch('fetchDataset', datasetId);
+        }
+        next();
+      } catch (error) {
+        console.error('加载数据集失败，无法进入分析页面:', error);
+        next('/dashboard');
+      }
+    }
   }
 ]
 

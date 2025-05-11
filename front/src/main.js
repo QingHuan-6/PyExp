@@ -8,7 +8,7 @@ import 'bootstrap'
 
 
 // 设置axios默认值
-axios.defaults.baseURL = 'http://10.83.216.164:5000/api'
+axios.defaults.baseURL = 'http://localhost:5000/api'
 axios.defaults.withCredentials = true
 
 // 添加请求拦截器以便调试

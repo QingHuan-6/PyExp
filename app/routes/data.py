@@ -202,6 +202,61 @@ def suggest_cleaning(dataset_id):
     
     return jsonify({'error': result['error']}), 400
 
+@data_bp.route('/datasets/<int:dataset_id>/full', methods=['GET'])
+@login_required
+def get_full_dataset(dataset_id):
+    try:
+        # 从数据库中获取数据集信息
+        dataset = Dataset.query.get_or_404(dataset_id)
+        
+        # 检查权限
+        if dataset.user_id != current_user.id:
+            return jsonify({'success': False, 'error': '无权访问该数据集'}), 403
+        
+        # 检查文件是否存在
+        if not os.path.exists(dataset.file_path):
+            return jsonify({'success': False, 'error': f'找不到文件: {os.path.basename(dataset.file_path)}'}), 404
+        
+        # 根据文件类型读取文件
+        file_type = dataset.file_type.lower()
+        
+        print(f"准备读取文件: {dataset.file_path}, 类型: {file_type}")
+        
+        # 读取整个文件
+        if file_type == 'csv':
+            df = pd.read_csv(dataset.file_path)
+        elif file_type in ['xlsx', 'xls']:
+            df = pd.read_excel(dataset.file_path)
+        else:
+            return jsonify({'success': False, 'error': f'不支持的文件类型: {file_type}'}), 400
+        
+        # 将DataFrame转换为字典列表
+        records = df.to_dict(orient='records')
+        
+        # 记录一些基本信息，用于调试
+        row_count = len(records)
+        col_count = len(df.columns)
+        
+        print(f"成功读取文件，行数: {row_count}, 列数: {col_count}")
+        
+        # 返回结果
+        return jsonify({
+            'success': True,
+            'data': records,
+            'stats': {
+                'row_count': row_count,
+                'column_count': col_count
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        stack_trace = traceback.format_exc()
+        print(f"读取文件时出错: {error_msg}")
+        print(f"错误详情: {stack_trace}")
+        return jsonify({'success': False, 'error': f'读取文件失败: {error_msg}'}), 500
+
 def to_dict(self):
     return {
         'id': self.id,  # 确保这个字段存在

@@ -69,9 +69,16 @@
             <router-link 
               :to="`/dataset/${dataset.id}`" 
               class="btn btn-sm btn-outline-primary w-100"
-              v-if="dataset && dataset.id"
+              @click="preloadDataset(dataset)"
+              custom
+              v-slot="{ navigate }"
             >
-              查看详情
+              <button
+                class="btn btn-sm btn-outline-primary w-100"
+                @click="preloadDataset(dataset); navigate();"
+              >
+                查看详情
+              </button>
             </router-link>
           </div>
         </div>
@@ -136,6 +143,9 @@
 </template>
 
 <script>
+import { Modal } from 'bootstrap';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
 export default {
   name: 'Dashboard',
   data() {
@@ -146,7 +156,8 @@ export default {
       uploadForm: {
         file: null,
         description: ''
-      }
+      },
+      bootstrapModal: null
     }
   },
   computed: {
@@ -158,6 +169,10 @@ export default {
     this.fetchDatasets()
   },
   methods: {
+    preloadDataset(dataset) {
+      this.$store.commit('setCurrentDataset', dataset);
+    },
+    
     async fetchDatasets() {
       this.loading = true
       
@@ -198,16 +213,12 @@ export default {
           this.uploadForm.file = null;
           this.uploadForm.description = '';
           
-          // 关闭模态窗口 - 使用 jQuery 方式关闭，不依赖 bootstrap 变量
+          // 关闭模态窗口 - 使用导入的Modal
           const modalEl = document.getElementById('uploadModal');
           if (modalEl) {
-            // 使用 jQuery 方式关闭模态窗口
-            modalEl.classList.remove('show');
-            modalEl.style.display = 'none';
-            document.body.classList.remove('modal-open');
-            const backdrop = document.querySelector('.modal-backdrop');
-            if (backdrop) {
-              backdrop.remove();
+            this.bootstrapModal = Modal.getInstance(modalEl);
+            if (this.bootstrapModal) {
+              this.bootstrapModal.hide();
             }
           }
           
@@ -221,6 +232,22 @@ export default {
         this.uploadError = '上传过程中发生错误';
       } finally {
         this.uploading = false;
+      }
+    },
+    
+    // 添加打开模态窗口的方法，方便直接从JS调用
+    openUploadModal() {
+      const modalEl = document.getElementById('uploadModal');
+      if (modalEl) {
+        this.bootstrapModal = new Modal(modalEl);
+        this.bootstrapModal.show();
+      }
+    },
+    
+    // 添加关闭模态窗口的方法
+    closeUploadModal() {
+      if (this.bootstrapModal) {
+        this.bootstrapModal.hide();
       }
     },
     

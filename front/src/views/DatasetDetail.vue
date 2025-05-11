@@ -48,7 +48,7 @@
       <div class="col-md-3 mb-3">
         <div class="card">
           <div class="card-body text-center">
-            <h5>{{ dataset.file_type.toUpperCase() }}</h5>
+            <h5>{{ dataset?.file_type?.toUpperCase() || '未知' }}</h5>
             <p class="card-text text-muted">文件类型</p>
           </div>
         </div>
@@ -63,185 +63,76 @@
       </div>
     </div>
     
-    <!-- 数据清洗选项 -->
-    <div v-if="showCleanOptions" class="card mb-4">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">数据清洗选项</h5>
-        <button 
-          type="button" 
-          class="btn-close" 
-          @click="showCleanOptions = false"
-        ></button>
-      </div>
-      <div class="card-body">
-        <div v-if="cleaningError" class="alert alert-danger">
-          {{ cleaningError }}
-        </div>
-        
-        <!-- 添加自动清洗建议按钮 -->
-        <div class="mb-3 d-grid">
-          <button 
-            class="btn btn-outline-info mb-3" 
-            @click="getCleaningSuggestions"
-            :disabled="gettingSuggestions"
-          >
-            {{ gettingSuggestions ? '正在分析数据...' : '自动分析并提供清洗建议' }}
-          </button>
-        </div>
-        
-        <!-- 清洗建议列表 -->
-        <div v-if="cleaningSuggestions.length > 0" class="mb-4">
-          <h6 class="mb-3">清洗建议</h6>
-          <div class="list-group">
-            <div 
-              v-for="(suggestion, index) in cleaningSuggestions" 
-              :key="index"
-              class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-            >
-              <div>
-                <div class="d-flex align-items-center">
-                  <span 
-                    class="badge rounded-pill me-2"
-                    :class="{
-                      'bg-danger': suggestion.priority === 'high',
-                      'bg-warning': suggestion.priority === 'medium',
-                      'bg-info': suggestion.priority === 'low'
-                    }"
-                  >
-                    {{ getPriorityLabel(suggestion.priority) }}
-                  </span>
-                  <span>{{ getOperationLabel(suggestion) }}</span>
-                </div>
-                <small class="text-muted d-block mt-1">{{ suggestion.reason }}</small>
-              </div>
-              <button 
-                class="btn btn-sm btn-outline-primary"
-                @click="applyCleaningSuggestion(suggestion)"
-              >
-                应用
-              </button>
-            </div>
-          </div>
-          
-          <div class="d-grid mt-3">
-            <button 
-              class="btn btn-success btn-sm"
-              @click="applyAllSuggestions"
-            >
-              一键应用所有建议
-            </button>
-          </div>
-        </div>
-        
-        <div class="mb-3">
-          <h6>清洗操作</h6>
-          <div class="mb-2" v-for="(op, index) in cleaningOperations" :key="index">
-            <div class="card">
-              <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div>
-                    <span>{{ getOperationLabel(op) }}</span>
-                  </div>
-                  <button 
-                    class="btn btn-sm btn-outline-danger"
-                    @click="removeOperation(index)"
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div v-if="cleaningOperations.length === 0" class="text-center py-3">
-            <p class="text-muted">未添加清洗操作</p>
-          </div>
-        </div>
-        
-        <hr>
-        
-        <div>
-          <h6>添加清洗操作</h6>
-          <div class="row mb-3">
-            <div class="col-md-4">
-              <select class="form-select" v-model="newOperation.type">
-                <option value="">选择操作类型</option>
-                <option value="drop_column">删除列</option>
-                <option value="fill_na">填充缺失值</option>
-                <option value="drop_na">删除含缺失值的行</option>
-                <option value="remove_outliers">移除异常值</option>
-                <option value="categorical_encoding">类别编码</option>
-              </select>
-            </div>
-            
-            <div class="col-md-4" v-if="newOperation.type">
-              <select class="form-select" v-model="newOperation.column">
-                <option value="">选择列</option>
-                <option 
-                  v-for="col in columns" 
-                  :key="col.name" 
-                  :value="col.name"
-                >
-                  {{ col.name }} ({{ col.type }})
-                </option>
-              </select>
-            </div>
-            
-            <div class="col-md-4" v-if="newOperation.type === 'fill_na'">
-              <select class="form-select" v-model="newOperation.method">
-                <option value="mean">均值填充</option>
-                <option value="median">中位数填充</option>
-                <option value="mode">众数填充</option>
-                <option value="value">指定值填充</option>
-              </select>
-            </div>
-            
-            <div class="col-md-4" v-if="newOperation.type === 'fill_na' && newOperation.method === 'value'">
-              <input 
-                type="text" 
-                class="form-control" 
-                placeholder="填充值" 
-                v-model="newOperation.value"
-              >
-            </div>
-            
-            <div class="col-md-4" v-if="newOperation.type === 'categorical_encoding'">
-              <select class="form-select" v-model="newOperation.method">
-                <option value="one_hot">独热编码</option>
-                <option value="label">标签编码</option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="d-grid">
-            <button 
-              class="btn btn-sm btn-outline-primary" 
-              @click="addOperation"
-              :disabled="!canAddOperation"
-            >
-              添加操作
-            </button>
-          </div>
-        </div>
-        
-        <div class="d-flex justify-content-end mt-4">
-          <button 
-            class="btn btn-primary" 
-            @click="cleanData"
-            :disabled="cleaning || cleaningOperations.length === 0"
-          >
-            {{ cleaning ? '清洗中...' : '开始清洗' }}
-          </button>
-        </div>
-      </div>
-    </div>
-    
     <!-- 数据预览 -->
     <div class="card">
-      <div class="card-header">
+      <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">数据预览</h5>
+        <!-- 添加预览完整文件的按钮 -->
+        <button 
+          class="btn btn-sm btn-outline-primary" 
+          @click="viewFullFile"
+        >
+          查看完整文件
+        </button>
       </div>
       <div class="card-body p-0">
+        <!-- 显示完整文件内容的模态框 -->
+        <div class="modal fade" id="fullFileModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title">{{ dataset.name }} - 完整内容</h5>
+                <button type="button" class="btn-close" @click="closeModal"></button>
+              </div>
+              <div class="modal-body">
+                <div v-if="loadingFullFile" class="text-center py-3">
+                  <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">加载中...</span>
+                  </div>
+                  <p class="mt-2">正在加载完整文件数据，请稍候...</p>
+                </div>
+                <div v-else>
+                  <!-- 显示文件统计信息 -->
+                  <div class="alert alert-info mb-3" v-if="fullFileData.length > 0">
+                    文件包含 <strong>{{ fullFileData.length }}</strong> 行数据，
+                    <strong>{{ columns.length }}</strong> 列
+                  </div>
+                  
+                  <!-- 完整文件内容表格 -->
+                  <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                      <thead>
+                        <tr>
+                          <th v-for="col in columns" :key="col.name">
+                            {{ col.name }}
+                            <span class="badge bg-secondary ms-1">{{ col.type }}</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(row, index) in fullFileData" :key="index">
+                          <td v-for="col in columns" :key="col.name">
+                            {{ row[col.name] !== undefined && row[col.name] !== null ? row[col.name] : '' }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  
+                  <!-- 如果数据为空显示提示 -->
+                  <div v-if="fullFileData.length === 0" class="text-center py-5 text-muted">
+                    <i class="bi bi-file-earmark-x display-4 mb-3"></i>
+                    <p>文件内容为空或无法读取</p>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @click="closeModal">关闭</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
         <div class="table-responsive">
           <table class="table table-striped table-sm">
             <thead>
@@ -253,9 +144,9 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(row, index) in preview" :key="index">
+              <tr v-for="(row, index) in (preview || [])" :key="index">
                 <td v-for="col in columns" :key="col.name">
-                  {{ row[col.name] }}
+                  {{ row[col.name] || '' }}
                 </td>
               </tr>
             </tbody>
@@ -263,45 +154,13 @@
         </div>
       </div>
     </div>
-    
-    <!-- 在数据清洗后添加结果统计面板 -->
-    <div v-if="cleaningResult" class="card mb-4">
-      <div class="card-header">
-        <h5 class="mb-0">数据清洗结果</h5>
-      </div>
-      <div class="card-body">
-        <div class="row">
-          <div class="col-md-4">
-            <div class="card">
-              <div class="card-body text-center">
-                <h5>{{ cleaningResult.original_count }}</h5>
-                <p class="card-text text-muted">原始行数</p>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="card">
-              <div class="card-body text-center">
-                <h5>{{ cleaningResult.cleaned_count }}</h5>
-                <p class="card-text text-muted">清洗后行数</p>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <div class="card">
-              <div class="card-body text-center">
-                <h5>{{ cleaningResult.removed_count }}</h5>
-                <p class="card-text text-muted">移除的行数</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script>
+import { Modal } from 'bootstrap';
+import 'bootstrap/dist/css/bootstrap.min.css';
+
 export default {
   name: 'DatasetDetail',
   data() {
@@ -322,11 +181,14 @@ export default {
       cleaningSuggestions: [],
       gettingSuggestions: false,
       cleaningResult: null,
+      loadingFullFile: false,
+      fullFileData: [],
+      bootstrapModal: null,
     }
   },
   computed: {
     dataset() {
-      return this.$store.getters.currentDataset
+      return this.$store.getters.currentDataset || {}
     },
     datasetId() {
       return Number(this.$route.params.id)
@@ -358,161 +220,198 @@ export default {
   methods: {
     async fetchDataset() {
       this.loading = true
+      this.columns = [] // 先初始化为空数组，避免未定义错误
       
       try {
-        const result = await this.$store.dispatch('fetchDataset', this.datasetId)
+        // 先检查是否有本地缓存的数据集信息
+        if (!this.dataset || !this.dataset.id) {
+          console.log('本地无数据集信息，从服务器获取...');
+        }
         
-        if (result.success) {
-          this.preview = result.preview
-          this.columns = JSON.parse(this.dataset.columns)
+        const result = await this.$store.dispatch('fetchDataset', this.datasetId)
+        console.log('获取数据集结果:', result);
+        
+        if (result && result.success) {
+          // 确保预览数据存在
+          this.preview = result.preview || []
+          
+          // 确保数据集信息存在
+          if (this.dataset) {
+            console.log('获取到数据集信息:', this.dataset);
+            
+            // 安全地解析columns数据
+            if (this.dataset.columns) {
+              try {
+                this.columns = JSON.parse(this.dataset.columns)
+                console.log('解析的列信息:', this.columns);
+              } catch (e) {
+                console.error('解析columns数据失败:', e)
+                this.columns = []
+              }
+            } else {
+              console.warn('数据集中没有列信息')
+              this.columns = []
+            }
+          } else {
+            console.error('数据集信息不存在')
+          }
+        } else {
+          console.error('获取数据集失败:', result?.error || '未知错误')
         }
       } catch (err) {
-        console.error('获取数据集失败', err)
+        console.error('获取数据集过程中发生错误:', err)
       } finally {
         this.loading = false
       }
     },
     
-    getOperationLabel(op) {
-      switch (op.type) {
-        case 'drop_column':
-          return `删除列 "${op.column}"`
-        case 'fill_na':
-          if (op.method === 'value') {
-            return `填充列 "${op.column}" 的缺失值为 "${op.value}"`
-          }
-          const methodMap = {
-            mean: '均值',
-            median: '中位数',
-            mode: '众数'
-          }
-          return `用${methodMap[op.method]}填充列 "${op.column}" 的缺失值`
-        case 'drop_na':
-          return `删除列 "${op.column}" 中含缺失值的行`
-        case 'remove_outliers':
-          return `移除列 "${op.column}" 中的异常值`
-        case 'categorical_encoding':
-          const encodeMap = {
-            one_hot: '独热编码',
-            label: '标签编码'
-          }
-          return `对列 "${op.column}" 进行${encodeMap[op.method]}`
-        default:
-          return '未知操作'
-      }
-    },
-    
-    addOperation() {
-      if (!this.canAddOperation) {
-        return
+    async viewFullFile() {
+      if (!this.dataset || !this.dataset.id) {
+        alert('数据集信息不完整，无法查看完整文件');
+        return;
       }
       
-      this.cleaningOperations.push({ ...this.newOperation })
-      
-      // 重置新操作
-      this.newOperation = {
-        type: '',
-        column: '',
-        method: '',
-        value: ''
-      }
-    },
-    
-    removeOperation(index) {
-      this.cleaningOperations.splice(index, 1)
-    },
-    
-    async cleanData() {
-      if (this.cleaningOperations.length === 0) {
-        return
-      }
-      
-      this.cleaning = true
-      this.cleaningError = null
+      this.loadingFullFile = true;
+      this.fullFileData = [];
       
       try {
-        const result = await this.$store.dispatch('cleanDataset', {
-          datasetId: this.datasetId,
-          operations: this.cleaningOperations
-        })
+        // 使用导入的Modal
+        const modalEl = document.getElementById('fullFileModal');
+        this.bootstrapModal = new Modal(modalEl);
+        this.bootstrapModal.show();
         
-        if (result.success) {
-          // 更新预览数据
-          this.preview = result.preview
+        console.log(`准备获取数据集 ${this.datasetId} 的完整文件内容`);
+        
+        // 获取完整文件内容
+        const response = await fetch(`/api/data/datasets/${this.datasetId}/full`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`服务器返回错误(${response.status}): ${errorText}`);
+        }
+        
+        const data = await response.json();
+        console.log('获取到完整文件响应:', data);
+        
+        if (data && data.success) {
+          // 设置文件数据
+          this.fullFileData = data.data || [];
           
-          // 保存清洗结果
-          this.cleaningResult = {
-            original_count: result.original_count,
-            cleaned_count: result.cleaned_count,
-            removed_count: result.removed_count
+          // 记录统计信息
+          const stats = data.stats || {};
+          console.log(`成功获取完整文件数据，共 ${stats.row_count || this.fullFileData.length} 行，${stats.column_count || '未知'} 列`);
+          
+          // 确保有列信息可以显示
+          if (this.columns.length === 0 && this.fullFileData.length > 0) {
+            // 从第一条记录中提取列信息
+            const firstRecord = this.fullFileData[0];
+            this.columns = Object.keys(firstRecord).map(key => ({
+              name: key,
+              type: typeof firstRecord[key] === 'number' ? 'numeric' : 'categorical'
+            }));
+            console.log('从完整数据中提取的列信息:', this.columns);
           }
-          
-          // 隐藏清洗选项
-          this.showCleanOptions = false
-          
-          // 重新获取数据集信息
-          await this.fetchDataset()
         } else {
-          this.cleaningError = result.error
+          throw new Error(data?.error || '获取完整文件失败');
         }
       } catch (err) {
-        this.cleaningError = '数据清洗失败'
-        console.error(err)
+        console.error('获取完整文件时出错:', err);
+        alert(`获取完整文件失败: ${err.message || '未知错误'}`);
+        this.closeModal();
       } finally {
-        this.cleaning = false
+        this.loadingFullFile = false;
       }
     },
     
-    async getCleaningSuggestions() {
-      this.gettingSuggestions = true
-      this.cleaningSuggestions = []
-      
-      try {
-        const response = await fetch(`/api/data/datasets/${this.datasetId}/suggest`)
-        const data = await response.json()
-        
-        if (data.success) {
-          this.cleaningSuggestions = data.suggestions
-        } else {
-          this.cleaningError = data.error || '获取清洗建议失败'
-        }
-      } catch (err) {
-        console.error('获取清洗建议时出错', err)
-        this.cleaningError = '获取清洗建议失败'
-      } finally {
-        this.gettingSuggestions = false
+    closeModal() {
+      if (this.bootstrapModal) {
+        this.bootstrapModal.hide();
       }
-    },
-    
-    getPriorityLabel(priority) {
-      switch(priority) {
-        case 'high': return '高优先级'
-        case 'medium': return '中优先级'
-        case 'low': return '低优先级'
-        default: return '建议'
-      }
-    },
-    
-    applyCleaningSuggestion(suggestion) {
-      // 将建议添加到清洗操作列表
-      this.cleaningOperations.push({ ...suggestion })
-    },
-    
-    applyAllSuggestions() {
-      // 按优先级排序建议
-      const sortedSuggestions = [...this.cleaningSuggestions].sort((a, b) => {
-        const priorityOrder = { high: 0, medium: 1, low: 2 };
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
-      });
-      
-      // 添加所有建议到操作列表
-      sortedSuggestions.forEach(suggestion => {
-        this.cleaningOperations.push({ ...suggestion });
-      });
-      
-      // 通知用户
-      alert(`已添加 ${sortedSuggestions.length} 个清洗操作！您可以检查并修改这些操作，然后点击"开始清洗"按钮执行。`);
-    },
+    }
+  },
+  beforeUnmount() {
+    // 移除事件监听器，避免内存泄漏
+    const closeButtons = document.querySelectorAll('[data-bs-dismiss="modal"]');
+    closeButtons.forEach(button => {
+      button.removeEventListener('click', this.closeModal);
+    });
   }
 }
-</script> 
+</script>
+
+<style scoped>
+.modal {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  outline: 0;
+  display: none;
+}
+
+.modal.show {
+  display: block;
+}
+
+.modal-dialog {
+  position: relative;
+  width: auto;
+  margin: 0.5rem;
+  pointer-events: none;
+  max-width: 90%;
+  margin: 1.75rem auto;
+}
+
+.modal-dialog-scrollable {
+  display: flex;
+  max-height: calc(100% - 3.5rem);
+}
+
+.modal-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  pointer-events: auto;
+  background-color: #fff;
+  background-clip: padding-box;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 0.3rem;
+  outline: 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1040;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000;
+  opacity: 0.5;
+}
+
+.modal-body {
+  position: relative;
+  flex: 1 1 auto;
+  padding: 1rem;
+}
+
+.modal-header,
+.modal-footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid #dee2e6;
+  border-top-left-radius: calc(0.3rem - 1px);
+  border-top-right-radius: calc(0.3rem - 1px);
+}
+
+.modal-footer {
+  border-top: 1px solid #dee2e6;
+  border-bottom: none;
+}
+</style>
