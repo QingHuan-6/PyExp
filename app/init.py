@@ -63,6 +63,7 @@ class Prediction(db.Model):
     target = db.Column(db.String(64))  # 目标列
     metrics = db.Column(db.Text)  # 评估指标(JSON)
     model_path = db.Column(db.String(256))  # 保存的模型路径
+    preprocessor_path = db.Column(db.String(256))  # 预处理器路径，用于房价预测
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     dataset_id = db.Column(db.Integer, db.ForeignKey('datasets.id'))
 
@@ -90,6 +91,23 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
+# 重建Prediction表的函数
+def recreate_prediction_table():
+    with app.app_context():
+        # 删除旧表（如果存在）
+        try:
+            Prediction.__table__.drop(db.engine)
+            print("预测表已删除")
+        except:
+            print("删除预测表失败，可能表不存在")
+        
+        # 创建新表
+        try:
+            Prediction.__table__.create(db.engine)
+            print("预测表已重新创建，包含新的preprocessor_path字段")
+        except Exception as e:
+            print(f"创建预测表时出错: {str(e)}")
+
 # 创建表的函数
 def create_tables():
     with app.app_context():
@@ -97,4 +115,7 @@ def create_tables():
     print("Tables created successfully!")
 
 if __name__ == '__main__':
+    # 重建Prediction表
+    recreate_prediction_table()
+    # 创建所有表
     create_tables()

@@ -192,6 +192,22 @@
                 <template v-if="visualizationForm.chartType === 'heatmap'">
                   <div class="mb-3">
                     <label class="form-label">选择要包含的列</label>
+                    <div class="mb-2">
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-outline-secondary"
+                        @click="selectAllColumnsForHeatmap"
+                      >
+                        全选
+                      </button>
+                      <button 
+                        type="button" 
+                        class="btn btn-sm btn-outline-secondary ms-2"
+                        @click="unselectAllColumnsForHeatmap"
+                      >
+                        取消全选
+                      </button>
+                    </div>
                     <div class="form-check" v-for="col in numericColumns" :key="col.name">
                       <input 
                         class="form-check-input" 
@@ -264,94 +280,83 @@
     <div v-if="activeTab === 'prediction'" class="prediction-panel">
       <div class="row">
         <div class="col-md-4">
-          <div class="card shadow-sm">
+          <div class="card shadow-sm mb-4">
             <div class="card-header">
-              <h5 class="mb-0">训练预测模型</h5>
+              <h5 class="mb-0">房价预测模型训练</h5>
             </div>
             <div class="card-body">
               <div v-if="predictionError" class="alert alert-danger">
                 {{ predictionError }}
               </div>
               
-              <form @submit.prevent="trainPredictionModel">
+              <form @submit.prevent="trainHousePriceModel">
                 <div class="mb-3">
                   <label for="modelName" class="form-label">模型名称</label>
                   <input 
                     type="text" 
                     class="form-control" 
                     id="modelName" 
-                    v-model="predictionForm.name"
+                    v-model="housePriceForm.name"
+                    placeholder="房价预测模型"
                     required
                   >
                 </div>
                 
-                <div class="mb-3">
-                  <label for="algorithm" class="form-label">算法</label>
-                  <select 
-                    class="form-select" 
-                    id="algorithm" 
-                    v-model="predictionForm.algorithm"
-                    required
-                  >
-                    <option value="">选择算法</option>
-                    <option value="linear_regression">线性回归</option>
-                    <option value="random_forest">随机森林</option>
-                  </select>
-                </div>
+                <p class="text-muted small mb-3">
+                  当前选择的数据集 <strong>{{ dataset.name }}</strong> 将用于训练模型。
+                  训练将自动选择目标变量(SalePrice)和相关特征。
+                </p>
                 
-                <div class="mb-3">
-                  <label for="target" class="form-label">目标变量 (房价)</label>
-                  <select 
-                    class="form-select" 
-                    id="target" 
-                    v-model="predictionForm.target"
-                    required
+                <div class="d-grid">
+                  <button 
+                    type="submit" 
+                    class="btn btn-primary"
+                    :disabled="trainingHousePriceModel"
                   >
-                    <option value="">选择目标列</option>
-                    <option 
-                      v-for="col in numericColumns" 
-                      :key="col.name" 
-                      :value="col.name"
+                    <span v-if="trainingHousePriceModel" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    {{ trainingHousePriceModel ? '训练中...' : '开始训练' }}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+          <div class="card shadow-sm" v-if="currentPrediction">
+            <div class="card-header">
+              <h5 class="mb-0">使用模型预测</h5>
+            </div>
+            <div class="card-body">
+              <div v-if="predictionResultError" class="alert alert-danger">
+                {{ predictionResultError }}
+              </div>
+              
+              <form @submit.prevent="predictHousePrice">
+                <div class="mb-3">
+                  <label for="testFile" class="form-label">上传测试文件 (CSV)</label>
+                  <div class="input-group">
+                    <input 
+                      type="file" 
+                      class="form-control" 
+                      id="testFile" 
+                      accept=".csv"
+                      ref="testFileInput"
+                      @change="handleTestFileChange"
+                      required
                     >
-                      {{ col.name }}
-                    </option>
-                  </select>
-                </div>
-                
-                <div class="mb-3">
-                  <label class="form-label">特征变量</label>
-                  <div class="feature-selection-container">
-                    <div 
-                      v-for="col in columns" 
-                      :key="col.name"
-                      class="form-check"
-                    >
-                      <input 
-                        class="form-check-input" 
-                        type="checkbox" 
-                        :id="`feature-${col.name}`"
-                        :value="col.name"
-                        v-model="predictionForm.features"
-                        :disabled="predictionForm.target === col.name"
-                      >
-                      <label class="form-check-label" :for="`feature-${col.name}`">
-                        {{ col.name }}
-                      </label>
-                    </div>
                   </div>
-                  <div class="form-text" v-if="predictionForm.features.length === 0">
-                    请至少选择一个特征
+                  <div class="form-text">
+                    上传不含SalePrice列的测试数据集CSV文件，其他列需与训练集一致
                   </div>
                 </div>
                 
                 <div class="d-grid">
                   <button 
                     type="submit" 
-                    class="btn btn-primary"
-                    :disabled="trainingModel || !canTrainModel"
+                    class="btn btn-success"
+                    :disabled="predictingHousePrice || !testFile"
                   >
-                    <span v-if="trainingModel" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                    {{ trainingModel ? '训练中...' : '训练模型' }}
+                    <span v-if="predictingHousePrice" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    {{ predictingHousePrice ? '预测中...' : '开始预测' }}
                   </button>
                 </div>
               </form>
@@ -366,7 +371,7 @@
             </div>
             <div class="card-body">
               <div v-if="currentPrediction" class="mb-3">
-                <h6>{{ currentPrediction.name }} ({{ getAlgorithmLabel(currentPrediction.algorithm, 'prediction') }})</h6>
+                <h6>{{ currentPrediction.name }} (XGBoost 回归模型)</h6>
                 
                 <div class="row text-center mt-4">
                   <div class="col-md-4">
@@ -394,23 +399,75 @@
                     </div>
                   </div>
                 </div>
-                
-                <div class="mt-4">
-                  <h6>使用的特征:</h6>
-                  <div class="d-flex flex-wrap gap-2">
-                    <span 
-                      v-for="feature in currentPrediction.features" 
-                      :key="feature"
-                      class="badge bg-secondary"
-                    >
-                      {{ feature }}
-                    </span>
-                  </div>
-                </div>
               </div>
               <div v-else class="py-5 text-center text-muted">
                 <i class="bi bi-cpu display-1 mb-3"></i>
                 <p>训练模型后在此处显示评估指标</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 预测结果 -->
+          <div class="card shadow-sm mb-4" v-if="predictionResults">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">预测结果</h5>
+              <span class="badge bg-primary">总计: {{ predictionResults.total_predictions }} 条预测</span>
+            </div>
+            <div class="card-body">
+              <div class="mb-4">
+                <h6>统计摘要</h6>
+                <div class="row text-center">
+                  <div class="col">
+                    <div class="card bg-light">
+                      <div class="card-body py-2">
+                        <h5 class="mb-0">${{ formatLargeNumber(predictionResults.summary.mean) }}</h5>
+                        <small class="text-muted">平均价格</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col">
+                    <div class="card bg-light">
+                      <div class="card-body py-2">
+                        <h5 class="mb-0">${{ formatLargeNumber(predictionResults.summary.median) }}</h5>
+                        <small class="text-muted">中位价格</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col">
+                    <div class="card bg-light">
+                      <div class="card-body py-2">
+                        <h5 class="mb-0">${{ formatLargeNumber(predictionResults.summary.min) }}</h5>
+                        <small class="text-muted">最低价格</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col">
+                    <div class="card bg-light">
+                      <div class="card-body py-2">
+                        <h5 class="mb-0">${{ formatLargeNumber(predictionResults.summary.max) }}</h5>
+                        <small class="text-muted">最高价格</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <h6>预测详情 (前100条)</h6>
+              <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>预测价格</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="result in predictionResults.predictions" :key="result.id">
+                      <td>{{ result.id }}</td>
+                      <td>${{ formatLargeNumber(result.predicted_price) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -436,24 +493,24 @@
                   <thead>
                     <tr>
                       <th>名称</th>
-                      <th>算法</th>
                       <th>R²</th>
                       <th>RMSE</th>
+                      <th>创建时间</th>
                       <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr v-for="prediction in predictions" :key="prediction.id">
                       <td>{{ prediction.name }}</td>
-                      <td>{{ getAlgorithmLabel(prediction.algorithm, 'prediction') }}</td>
                       <td>{{ formatNumber(prediction.metrics.r2) }}</td>
                       <td>{{ formatNumber(prediction.metrics.rmse) }}</td>
+                      <td>{{ formatDate(prediction.created_at) }}</td>
                       <td>
                         <button 
                           class="btn btn-sm btn-outline-primary"
                           @click="selectPrediction(prediction)"
                         >
-                          查看
+                          选择模型
                         </button>
                       </td>
                     </tr>
@@ -531,6 +588,22 @@
                 <!-- 特征选择 -->
                 <div class="mb-3" v-if="advancedAnalysisForm.algorithm">
                   <label class="form-label">特征变量</label>
+                  <div class="mb-2">
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary"
+                      @click="selectAllFeatures"
+                    >
+                      全选
+                    </button>
+                    <button 
+                      type="button" 
+                      class="btn btn-sm btn-outline-secondary ms-2"
+                      @click="unselectAllFeatures"
+                    >
+                      取消全选
+                    </button>
+                  </div>
                   <div class="feature-selection-container">
                     <div 
                       v-for="col in columns" 
@@ -858,15 +931,17 @@ export default {
       currentVisualization: null,
       
       // 预测相关
-      predictionForm: {
+      housePriceForm: {
         name: '',
-        algorithm: '',
-        target: '',
-        features: []
+        testFile: null
       },
-      trainingModel: false,
+      trainingHousePriceModel: false,
+      predictingHousePrice: false,
       predictionError: null,
+      predictionResultError: null,
       currentPrediction: null,
+      predictionResults: null,
+      testFile: null,
       predictions: [],
       loadingPredictions: false,
       
@@ -1023,7 +1098,7 @@ export default {
       return !!config.x && !!config.y
     },
     canTrainModel() {
-      const { algorithm, target, features } = this.predictionForm
+      const { algorithm, target, features } = this.housePriceForm
       return !!algorithm && !!target && features.length > 0
     },
     // 高级分析相关计算属性
@@ -1072,10 +1147,10 @@ export default {
         this.fetchPredictions()
       }
     },
-    'predictionForm.target'(newValue) {
+    'housePriceForm.target'(newValue) {
       // 当目标变量改变时，移除特征列表中的目标变量
-      if (newValue && this.predictionForm.features.includes(newValue)) {
-        this.predictionForm.features = this.predictionForm.features.filter(f => f !== newValue)
+      if (newValue && this.housePriceForm.features.includes(newValue)) {
+        this.housePriceForm.features = this.housePriceForm.features.filter(f => f !== newValue)
       }
     },
     // 高级分析相关watcher
@@ -1229,35 +1304,37 @@ export default {
       }
     },
     
-    async trainPredictionModel() {
-      if (!this.canTrainModel) return
-      
-      this.trainingModel = true
-      this.predictionError = null
+    async trainHousePriceModel() {
+      this.trainingHousePriceModel = true;
+      this.predictionError = null;
       
       try {
-        const result = await this.$store.dispatch('trainModel', {
-          datasetId: this.datasetId,
-          algorithm: this.predictionForm.algorithm,
-          features: this.predictionForm.features,
-          target: this.predictionForm.target,
-          name: this.predictionForm.name
-        })
+        const response = await axios.post(`/analysis/train_price_model`, {
+          dataset_id: this.datasetId,
+          model_name: this.housePriceForm.name || '房价预测模型'
+        });
         
-        if (result.success) {
-          // 重新获取预测记录
-          await this.fetchPredictions()
+        if (response.data.success) {
+          // 训练成功，重新加载模型列表
+          await this.fetchPredictions();
+          
+          // 选择新训练的模型
+          const newPredictionId = response.data.prediction_id;
+          const newPrediction = this.predictions.find(p => p.id === newPredictionId);
+          if (newPrediction) {
+            this.selectPrediction(newPrediction);
+          }
           
           // 重置表单
-          this.predictionForm.name = ''
+          this.housePriceForm.name = '';
         } else {
-          this.predictionError = result.error
+          this.predictionError = response.data.error || '训练模型失败';
         }
-      } catch (err) {
-        this.predictionError = '模型训练失败'
-        console.error(err)
+      } catch (error) {
+        console.error('训练房价预测模型失败:', error);
+        this.predictionError = error.response?.data?.error || '训练模型失败，请检查网络连接';
       } finally {
-        this.trainingModel = false
+        this.trainingHousePriceModel = false;
       }
     },
     
@@ -1502,7 +1579,86 @@ export default {
       
       // 保存图表实例供后续使用
       this.dimensionReductionChart = chart;
-    }
+    },
+    
+    // 格式化大数字为千分位表示
+    formatLargeNumber(value) {
+      if (value === null || value === undefined) return '-';
+      return new Intl.NumberFormat('en-US').format(Math.round(value));
+    },
+    
+    // 格式化日期
+    formatDate(dateString) {
+      if (!dateString) return '-';
+      const date = new Date(dateString);
+      return date.toLocaleDateString('zh-CN');
+    },
+    
+    // 使用当前模型进行房价预测
+    async predictHousePrice() {
+      if (!this.currentPrediction || !this.testFile) {
+        this.predictionResultError = '请先选择模型和测试文件';
+        return;
+      }
+      
+      this.predictingHousePrice = true;
+      this.predictionResultError = null;
+      this.predictionResults = null;
+      
+      try {
+        const formData = new FormData();
+        formData.append('file', this.testFile);
+        formData.append('prediction_id', this.currentPrediction.id);
+        
+        const response = await axios.post('/analysis/predict_house_price', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        if (response.data.success) {
+          this.predictionResults = response.data;
+        } else {
+          this.predictionResultError = response.data.error || '预测失败';
+        }
+      } catch (error) {
+        console.error('房价预测失败:', error);
+        this.predictionResultError = error.response?.data?.error || '预测失败，请检查网络连接';
+      } finally {
+        this.predictingHousePrice = false;
+      }
+    },
+    
+    // 处理测试文件选择
+    handleTestFileChange(event) {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        this.testFile = files[0];
+        console.log('已选择测试文件:', this.testFile.name);
+      } else {
+        this.testFile = null;
+      }
+    },
+    
+    // 全选特征
+    selectAllFeatures() {
+      this.advancedAnalysisForm.featureColumns = this.columns.map(col => col.name);
+    },
+    
+    // 取消全选特征
+    unselectAllFeatures() {
+      this.advancedAnalysisForm.featureColumns = [];
+    },
+    
+    // 全选热力图的列
+    selectAllColumnsForHeatmap() {
+      this.visualizationForm.config.columns = this.numericColumns.map(col => col.name);
+    },
+    
+    // 取消全选热力图的列
+    unselectAllColumnsForHeatmap() {
+      this.visualizationForm.config.columns = [];
+    },
   }
 }
 </script>

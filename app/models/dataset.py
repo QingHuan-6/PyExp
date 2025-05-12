@@ -54,5 +54,6 @@ class Prediction(db.Model):
     target = db.Column(db.String(64))  # 目标列
     metrics = db.Column(db.Text)  # 评估指标(JSON)
     model_path = db.Column(db.String(256))  # 保存的模型路径
+    preprocessor_path = db.Column(db.String(256))  # 预处理器路径，用于房价预测
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     dataset_id = db.Column(db.Integer, db.ForeignKey('datasets.id')) 

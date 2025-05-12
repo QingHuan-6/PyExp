@@ -17,7 +17,10 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 import joblib
-
+# 导入房价预测模块
+from app.services.predict_methods import load_data, preprocess_data, full_training_pipeline, predict, evaluate_model as evaluate_house_price_model
+import time
+import app.services.predict_methods
 
 @analysis_bp.route('/visualize/<int:dataset_id>', methods=['POST'])
 @login_required
@@ -346,9 +349,6 @@ def api_perform_classification():
 
 @analysis_bp.route('/perform_dimensionality_reduction', methods=['POST'])
 @login_required
-
-
-
 def api_perform_dimensionality_reduction():
     """API端点：执行降维分析"""
     data = request.get_json()
@@ -433,6 +433,173 @@ def api_perform_dimensionality_reduction():
     except Exception as e:
         current_app.logger.error(f"降维分析错误: {str(e)}")
         return jsonify({'success': False, 'error': f'降维分析失败: {str(e)}'}), 500
+
+@analysis_bp.route('/train_price_model', methods=['POST'])
+@login_required
+def train_price_model():
+    """训练房价预测模型的API端点"""
+    try:
+        data = request.get_json()
+        dataset_id = data.get('dataset_id')
+        model_name = data.get('model_name', '房价预测模型')
+        
+        # 获取数据集
+        dataset = Dataset.query.get_or_404(dataset_id)
+        
+        # 检查权限
+        if dataset.user_id != current_user.id:
+            return jsonify({'success': False, 'error': '无权访问该数据集'}), 403
+        
+        # 设置模型和预处理器保存路径
+        model_filename = f'house_price_model_{dataset_id}_{current_user.id}.joblib'
+        preprocessor_filename = f'house_price_preprocessor_{dataset_id}_{current_user.id}.joblib'
+        
+        model_path = os.path.join(current_app.config['TEMP_FOLDER'], model_filename)
+        preprocessor_path = os.path.join(current_app.config['TEMP_FOLDER'], preprocessor_filename)
+        
+        # 确保临时目录存在
+        os.makedirs(current_app.config['TEMP_FOLDER'], exist_ok=True)
+        
+        # 执行完整训练流程
+        model, preprocessor_objects = full_training_pipeline(
+            train_file_path=dataset.file_path,
+            model_save_path=model_path,
+            preprocessor_save_path=preprocessor_path
+        )
+        
+        # 加载数据用于评估
+        df = load_data(dataset.file_path)
+        
+        # 提取特征和标签
+        features, target, _, _ = preprocess_data(df, training=True)
+        
+        # 划分训练集和测试集
+        X_train, X_test, y_train, y_test = train_test_split(
+            features, target, test_size=0.2, random_state=42
+        )
+        
+        # 评估模型
+        metrics = evaluate_house_price_model(model, X_test, y_test)
+        
+        # 保存模型信息到数据库
+        prediction = Prediction(
+            name=model_name,
+            algorithm='xgboost',  # 固定使用XGBoost算法
+            features=json.dumps(preprocessor_objects.get('feature_names', [])),
+            target='SalePrice',  # 固定目标变量
+            metrics=json.dumps(metrics),
+            model_path=model_path,
+            dataset_id=dataset_id,
+            preprocessor_path=preprocessor_path  # 新增字段，存储预处理器路径
+        )
+        
+        db.session.add(prediction)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': '房价预测模型训练成功',
+            'prediction_id': prediction.id,
+            'metrics': metrics
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"训练房价预测模型出错: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': f'训练模型失败: {str(e)}'
+        }), 500
+
+@analysis_bp.route('/predict_house_price', methods=['POST'])
+@login_required
+def predict_house_price():
+    """使用训练好的模型预测房价"""
+    try:
+        # 确保请求包含文件
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': '没有上传文件'}), 400
+        
+        file = request.files['file']
+        
+        # 检查文件名是否为空
+        if file.filename == '':
+            return jsonify({'success': False, 'error': '没有选择文件'}), 400
+        
+        # 检查是否为CSV文件
+        if not file.filename.endswith('.csv'):
+            return jsonify({'success': False, 'error': '只支持CSV文件'}), 400
+        
+        # 获取预测模型ID
+        prediction_id = request.form.get('prediction_id')
+        if not prediction_id:
+            return jsonify({'success': False, 'error': '未提供模型ID'}), 400
+        
+        # 获取模型信息
+        prediction_model = Prediction.query.get_or_404(prediction_id)
+        
+        # 检查权限
+        if prediction_model.dataset.user_id != current_user.id:
+            return jsonify({'success': False, 'error': '无权访问该模型'}), 403
+        
+        # 检查模型和预处理器路径是否存在
+        if not prediction_model.model_path or not prediction_model.preprocessor_path:
+            return jsonify({'success': False, 'error': '模型信息不完整'}), 400
+        
+        # 保存上传的文件
+        temp_folder = current_app.config['TEMP_FOLDER']
+        os.makedirs(temp_folder, exist_ok=True)
+        
+        test_file_path = os.path.join(temp_folder, f'test_file_{current_user.id}_{int(time.time())}.csv')
+        file.save(test_file_path)
+        
+        # 加载测试数据集
+        test_data = load_data(test_file_path)
+        
+        # 进行预测
+        predictions, id_column = app.services.predict_methods.predict(
+            test_data,
+            prediction_model.model_path,
+            prediction_model.preprocessor_path
+        )
+        
+        # 创建预测结果列表
+        prediction_results = []
+        for i in range(len(predictions)):
+            row_id = int(id_column[i]) if id_column is not None else i + 1
+            prediction_results.append({
+                'id': row_id,
+                'predicted_price': float(predictions[i])
+            })
+        
+        # 计算一些汇总统计信息
+        summary = {
+            'count': len(predictions),
+            'mean': float(np.mean(predictions)),
+            'median': float(np.median(predictions)),
+            'min': float(np.min(predictions)),
+            'max': float(np.max(predictions))
+        }
+        
+        # 清理临时文件
+        try:
+            os.remove(test_file_path)
+        except:
+            current_app.logger.warning(f"无法删除临时文件: {test_file_path}")
+        
+        return jsonify({
+            'success': True,
+            'message': '房价预测完成',
+            'predictions': prediction_results[:100],  # 仅返回前100个结果避免响应过大
+            'total_predictions': len(predictions),
+            'summary': summary
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"预测房价出错: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': f'预测失败: {str(e)}'
+        }), 500
 
 def perform_clustering(data, algorithm_config):
     """
