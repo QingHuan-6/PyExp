@@ -1,4 +1,7 @@
 import pandas as pd
+import matplotlib
+# 设置非交互式后端，避免tkinter线程问题
+matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os

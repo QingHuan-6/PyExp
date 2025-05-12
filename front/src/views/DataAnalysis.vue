@@ -828,9 +828,50 @@
                   
                   <div class="row mt-4">
                     <div class="col-md-12 text-center">
-                      <p>降维后数据 (前1000个点的2D投影)</p>
+                      <p>降维后数据 (前{{ currentAnalysisResult.result.returned_samples }}个点的2D投影)</p>
                       <!-- 使用echarts展示散点图 -->
                       <div ref="dimensionReductionChart" style="height: 400px; width: 100%; border-radius: 8px;"></div>
+                    </div>
+                  </div>
+                  
+                  <!-- 特征贡献信息展示 - 仅对PCA有效 -->
+                  <div class="mt-4" v-if="currentAnalysisResult.result.feature_importance">
+                    <h6>特征贡献度:</h6>
+                    
+                    <div class="row mt-3">
+                      <div class="col-md-6">
+                        <h6 class="mb-2">主成分1主要由以下特征构成:</h6>
+                        <ul class="list-group">
+                          <li class="list-group-item d-flex justify-content-between align-items-center" 
+                              v-for="(feature, index) in currentAnalysisResult.result.top_features.slice(0, 5)" 
+                              :key="index">
+                            {{ feature.feature }}
+                            <div class="progress" style="width: 50%;">
+                              <div class="progress-bar" 
+                                  :style="{width: `${feature.pc1_contribution * 100}%`}">
+                                {{ (feature.pc1_contribution * 100).toFixed(1) }}%
+                              </div>
+                            </div>
+                          </li>
+                        </ul>
+                      </div>
+                      
+                      <div class="col-md-6" v-if="currentAnalysisResult.result.axis_labels && currentAnalysisResult.result.axis_labels.y_top_features">
+                        <h6 class="mb-2">主成分2主要由以下特征构成:</h6>
+                        <ul class="list-group">
+                          <li class="list-group-item d-flex justify-content-between align-items-center" 
+                              v-for="(featureName, index) in currentAnalysisResult.result.axis_labels.y_top_features.slice(0, 5)" 
+                              :key="index">
+                            {{ featureName }}
+                            <div class="progress" style="width: 50%;">
+                              <div class="progress-bar" 
+                                  :style="{width: `${getFeatureContribution(featureName, 'pc2_contribution') * 100}%`}">
+                                {{ (getFeatureContribution(featureName, 'pc2_contribution') * 100).toFixed(1) }}%
+                              </div>
+                            </div>
+                          </li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
                   
@@ -845,6 +886,20 @@
                       </div>
                     </div>
                     <p class="small text-muted">第一主成分解释方差比例</p>
+                    
+                    <div class="progress mb-2" v-if="currentAnalysisResult.result.explained_variance.length > 1">
+                      <div 
+                        class="progress-bar" 
+                        :style="{width: `${currentAnalysisResult.result.explained_variance[1] * 100}%`}"
+                      >
+                        {{ (currentAnalysisResult.result.explained_variance[1] * 100).toFixed(2) }}%
+                      </div>
+                    </div>
+                    <p class="small text-muted" v-if="currentAnalysisResult.result.explained_variance.length > 1">第二主成分解释方差比例</p>
+                    
+                    <div class="alert alert-info mt-3" v-if="currentAnalysisResult.result.warning">
+                      <small>{{ currentAnalysisResult.result.warning }}</small>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1486,6 +1541,20 @@ export default {
       return typeMap[type] || type;
     },
     
+    // 获取特征对某个主成分的贡献度
+    getFeatureContribution(featureName, contributionType) {
+      if (!this.currentAnalysisResult || 
+          !this.currentAnalysisResult.result.feature_importance) {
+        return 0;
+      }
+      
+      const feature = this.currentAnalysisResult.result.feature_importance.find(
+        f => f.feature === featureName
+      );
+      
+      return feature ? feature[contributionType] : 0;
+    },
+    
     // 创建降维结果可视化图表
     createDimensionReductionChart() {
       if (!this.currentAnalysisResult || 
@@ -1505,17 +1574,32 @@ export default {
       
       // 准备数据
       const data = this.currentAnalysisResult.result.data_2d;
+      const result = this.currentAnalysisResult.result;
+      
+      // 获取轴标签
+      const xAxisName = result.axis_labels?.x_axis || "维度1";
+      const yAxisName = result.axis_labels?.y_axis || "维度2";
       
       // 设置图表选项
       const option = {
         title: {
-          text: '降维结果可视化',
+          text: `降维结果可视化 (${result.algorithm === 'pca' ? 'PCA' : 't-SNE'})`,
           left: 'center'
         },
         tooltip: {
           trigger: 'item',
           formatter: function(params) {
-            return `点 ${params.dataIndex}`;
+            return `<div style="border-bottom: 1px solid rgba(0,0,0,.1); padding-bottom: 5px; margin-bottom: 5px">
+                    <strong>数据点 ${params.dataIndex}</strong>
+                    </div>
+                    ${xAxisName}: ${params.data[0].toFixed(3)}<br>
+                    ${yAxisName}: ${params.data[1].toFixed(3)}`;
+          },
+          backgroundColor: 'rgba(255, 255, 255, 0.9)',
+          borderColor: '#ccc',
+          borderWidth: 1,
+          textStyle: {
+            color: '#333'
           }
         },
         grid: {
@@ -1526,30 +1610,44 @@ export default {
           containLabel: true
         },
         xAxis: {
-          name: '维度1',
+          name: xAxisName,
+          nameLocation: 'center',
+          nameGap: 30,
+          nameTextStyle: {
+            fontWeight: 'bold'
+          },
           type: 'value',
-          scale: true
+          scale: true,
+          splitLine: {
+            lineStyle: {
+              type: 'dashed'
+            }
+          }
         },
         yAxis: {
-          name: '维度2',
+          name: yAxisName,
+          nameLocation: 'center',
+          nameGap: 50,
+          nameTextStyle: {
+            fontWeight: 'bold'
+          },
           type: 'value',
-          scale: true
+          scale: true,
+          splitLine: {
+            lineStyle: {
+              type: 'dashed'
+            }
+          }
         },
         series: [
           {
             name: '降维点',
             type: 'scatter',
             data: data,
-            symbolSize: 5,
+            symbolSize: 7,
             itemStyle: {
               color: function(params) {
-                // 生成随机颜色
-                const colorList = [
-                  '#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de',
-                  '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc'
-                ];
-                
-                // 根据数据的第一维度进行简单的分组
+                // 生成渐变色，基于点的第一维度
                 if (data.length > 0) {
                   const firstDimMin = Math.min(...data.map(item => item[0]));
                   const firstDimMax = Math.max(...data.map(item => item[0]));
@@ -1557,12 +1655,28 @@ export default {
                   
                   if (range > 0) {
                     const value = data[params.dataIndex][0];
-                    const index = Math.floor(((value - firstDimMin) / range) * colorList.length);
-                    return colorList[Math.min(index, colorList.length - 1)];
+                    const normalized = (value - firstDimMin) / range;
+                    
+                    // 使用简单的颜色映射
+                    const colorList = [
+                      '#5470c6', // 蓝色
+                      '#91cc75', // 绿色
+                      '#fac858', // 黄色
+                      '#ee6666', // 红色
+                      '#73c0de'  // 浅蓝色
+                    ];
+                    
+                    // 根据normalized值选择颜色
+                    const index = Math.min(
+                      Math.floor(normalized * colorList.length),
+                      colorList.length - 1
+                    );
+                    
+                    return colorList[index];
                   }
                 }
                 
-                return colorList[0];
+                return '#5470c6';
               }
             }
           }

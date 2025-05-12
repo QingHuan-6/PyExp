@@ -413,14 +413,57 @@ def api_perform_dimensionality_reduction():
             else:
                 data_2d = data_sample.tolist()
             
+            # 构建响应数据
             response = {
                 'success': True,
                 'data_2d': data_2d,
                 'total_samples': int(len(result['transformed_data'])),
                 'returned_samples': int(len(data_2d)),
                 'explained_variance': result.get('explained_variance', None),
-                'warning': warning_message
+                'warning': warning_message,
+                'feature_names': numerical_columns,  # 添加特征名称
+                'algorithm': algorithm_config.get('algorithm', '')  # 添加使用的算法
             }
+            
+            # 针对PCA算法添加额外信息
+            if algorithm_config.get('algorithm') == 'pca' and 'components' in result:
+                # 获取前两个主成分的特征贡献
+                components = result['components']
+                if components.shape[0] >= 2:
+                    # 计算每个特征对前两个主成分的贡献(绝对值)
+                    feature_importance = []
+                    for i, feature in enumerate(numerical_columns):
+                        importance = {
+                            'feature': feature,
+                            'pc1_contribution': float(abs(components[0, i])),
+                            'pc2_contribution': float(abs(components[1, i])) if components.shape[0] > 1 else 0
+                        }
+                        feature_importance.append(importance)
+                    
+                    # 按PC1贡献度排序
+                    feature_importance.sort(key=lambda x: x['pc1_contribution'], reverse=True)
+                    
+                    # 提取前5个最重要的特征
+                    top_features = feature_importance[:5]
+                    
+                    response['feature_importance'] = feature_importance
+                    response['top_features'] = top_features
+                    
+                    # 添加轴标签说明
+                    pc1_top_features = sorted(feature_importance, key=lambda x: x['pc1_contribution'], reverse=True)[:3]
+                    pc2_top_features = sorted(feature_importance, key=lambda x: x['pc2_contribution'], reverse=True)[:3]
+                    
+                    response['axis_labels'] = {
+                        'x_axis': f"主成分1 (解释方差: {response['explained_variance'][0]*100:.2f}%)",
+                        'y_axis': f"主成分2 (解释方差: {response['explained_variance'][1]*100:.2f}%)" if len(response['explained_variance']) > 1 else "主成分2",
+                        'x_top_features': [f['feature'] for f in pc1_top_features],
+                        'y_top_features': [f['feature'] for f in pc2_top_features]
+                    }
+            elif algorithm_config.get('algorithm') == 'tsne':
+                response['axis_labels'] = {
+                    'x_axis': "t-SNE 维度1",
+                    'y_axis': "t-SNE 维度2"
+                }
         else:
             response = {
                 'success': True,
