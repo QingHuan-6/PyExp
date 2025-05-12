@@ -5,7 +5,7 @@ import json
 
 # 初始化 Flask 应用
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:123456@localhost/house_price'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:S30W24j05@localhost/house_price'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 

@@ -68,27 +68,6 @@
       </div>
     </div>
     
-    <div class="p-5 mb-4 bg-light rounded-3">
-      <div class="container-fluid">
-        <h2 class="mb-3">适合初学者的简单界面</h2>
-        <p class="fs-5">
-          无需复杂的编程知识，只需上传数据，通过友好的界面就能完成数据分析和预测
-        </p>
-        <div class="row align-items-center">
-          <div class="col-md-6">
-            <ul class="list-group list-group-flush">
-              <li class="list-group-item bg-transparent"><i class="bi bi-check2-all text-primary me-2"></i> 响应式布局，适配各种设备</li>
-              <li class="list-group-item bg-transparent"><i class="bi bi-check2-all text-primary me-2"></i> 简洁的用户界面和数据展示</li>
-              <li class="list-group-item bg-transparent"><i class="bi bi-check2-all text-primary me-2"></i> 用户友好的数据清洗流程</li>
-              <li class="list-group-item bg-transparent"><i class="bi bi-check2-all text-primary me-2"></i> 一键式分析与预测功能</li>
-            </ul>
-          </div>
-          <div class="col-md-6 text-center mt-4 mt-md-0">
-            <router-link to="/register" class="btn btn-lg btn-primary">开始使用</router-link>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
