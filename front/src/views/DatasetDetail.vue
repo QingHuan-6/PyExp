@@ -13,13 +13,13 @@
       </div>
       <div>
         <router-link 
-          :to="`/analysis/${dataset.id}`" 
+          :to="`/analysis/${datasetId}`" 
           class="btn btn-primary me-2"
         >
           分析与预测
         </router-link>
         <router-link 
-          :to="`/data-visualization/${datasetId}`" 
+          :to="`/data-visualization/${datasetId}`"  
           class="btn btn-info me-2"
         >
           数据可视化

@@ -302,6 +302,9 @@ export default createStore({
     },
     datasets(state) {
       return state.datasets || []
+    },
+    currentDataset(state){
+      return state.currentDataset || {}
     }
   }
 })

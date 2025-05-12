@@ -13,7 +13,7 @@ login_manager = LoginManager()
 login_manager.login_view = 'auth.login'
 
 def create_app(config_name):
-    app = Flask(__name__)
+    app = Flask(__name__, static_folder='../static', static_url_path='/static')
     app.config.from_object(config[config_name])
     
     # 确保SECRET_KEY已设置
@@ -50,6 +50,10 @@ def create_app(config_name):
     import os
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
         os.makedirs(app.config['UPLOAD_FOLDER'])
+    
+    # 确保临时文件目录存在
+    if not os.path.exists(app.config['TEMP_FOLDER']):
+        os.makedirs(app.config['TEMP_FOLDER'])
     
     # 注册蓝图
     from app.routes import auth_bp, data_bp, analysis_bp

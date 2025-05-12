@@ -4,6 +4,7 @@ import seaborn as sns
 import os
 import uuid
 from app.services.data_cleaner import read_file
+from flask import current_app
 
 def create_visualization(file_path, file_type, chart_type, config):
     """根据配置创建可视化图表"""
@@ -98,10 +99,13 @@ def create_visualization(file_path, file_type, chart_type, config):
         else:
             return {'success': False, 'error': f'不支持的图表类型: {chart_type}'}
         
-        # 保存图表
-        image_dir = 'static/images'
-        if not os.path.exists(image_dir):
-            os.makedirs(image_dir)
+        # 保存图表到项目根目录的static/images文件夹
+        # 获取应用的根目录
+        app_root = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        image_dir = os.path.join(app_root, 'static', 'images')
+        
+        # 确保目录存在
+        os.makedirs(image_dir, exist_ok=True)
             
         filename = f"{chart_type}_{uuid.uuid4().hex}.png"
         image_path = os.path.join(image_dir, filename)
@@ -116,6 +120,8 @@ def create_visualization(file_path, file_type, chart_type, config):
         }
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return {
             'success': False,
             'error': str(e)

@@ -150,10 +150,7 @@ def get_dataset(dataset_id):
     
     # 读取数据预览
     preview, _, _ = preview_data(dataset.file_path, dataset.file_type)
-    print("返回数据集详情:", {
-        'dataset': dataset.to_dict(),
-        'preview': preview
-    })
+
     return jsonify({
         'dataset': dataset.to_dict(),
         'preview': preview
