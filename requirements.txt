@@ -1,0 +1,17 @@
+werkzeug==2.0.3
+flask==2.0.1
+flask-sqlalchemy==2.5.1
+flask-migrate==3.1.0
+flask-login==0.5.0
+flask-cors==3.0.10
+pandas==2.1.0
+numpy==1.25.0
+scikit-learn==1.0
+matplotlib==3.4.3
+seaborn==0.11.2
+pymysql==1.0.2
+flask-wtf==0.15.1
+openpyxl==3.0.9
+xlrd==2.0.1
+xgboost==2.1.4  
+scikit-learn==1.0
