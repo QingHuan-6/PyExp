@@ -1,4 +1,4 @@
-from flask import request, jsonify, current_app, session
+from flask import request, jsonify, current_app, session, send_file
 from flask_login import login_required, current_user
 import os
 import pandas as pd
@@ -9,6 +9,7 @@ from app.models.dataset import Dataset
 from app.routes import data_bp
 from app.services.data_cleaner import preview_data, clean_data
 import numpy as np
+from io import BytesIO
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -316,6 +317,59 @@ def get_full_dataset(dataset_id):
         print(f"读取文件时出错: {error_msg}")
         print(f"错误详情: {stack_trace}")
         return jsonify({'success': False, 'error': f'读取文件失败: {error_msg}'}), 500
+
+@data_bp.route('/datasets/<int:dataset_id>/export', methods=['GET'])
+def export_dataset(dataset_id):
+    
+    try:
+        # 从数据库中获取数据集信息
+        dataset = Dataset.query.get_or_404(dataset_id)
+        
+        # 检查文件是否存在
+        if not os.path.exists(dataset.file_path):
+            return jsonify({'success': False, 'error': f'找不到文件: {os.path.basename(dataset.file_path)}'}), 404
+        
+        # 根据文件类型读取文件
+        file_type = dataset.file_type.lower()
+        
+        # 读取整个文件
+        if file_type == 'csv':
+            df = pd.read_csv(dataset.file_path)
+        elif file_type in ['xlsx', 'xls']:
+            df = pd.read_excel(dataset.file_path)
+        else:
+            return jsonify({'success': False, 'error': f'不支持的文件类型: {file_type}'}), 400
+
+        # 创建一个BytesIO对象以保存导出文件
+        output = BytesIO()
+        
+        # 导出文件名
+        export_filename = f"{dataset.name.split('.')[0]}_exported.{file_type}"
+        
+        # 根据原始文件类型导出
+        if file_type == 'csv':
+            df.to_csv(output, index=False, encoding='utf-8-sig')
+        elif file_type in ['xlsx', 'xls']:
+            df.to_excel(output, index=False)
+        
+        # 设置文件指针到开始位置
+        output.seek(0)
+        
+        # 发送文件给客户端
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=export_filename,
+            mimetype=f'application/{file_type}'
+        )
+    
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        stack_trace = traceback.format_exc()
+        print(f"导出文件时出错: {error_msg}")
+        print(f"错误详情: {stack_trace}")
+        return jsonify({'success': False, 'error': f'导出文件失败: {error_msg}'}), 500
 
 def to_dict(self):
     return {

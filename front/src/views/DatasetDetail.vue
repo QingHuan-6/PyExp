@@ -25,6 +25,13 @@
           数据可视化
         </router-link>
         <button 
+          class="btn btn-success me-2"
+          @click="exportDataset"
+          :disabled="exporting"
+        >
+          {{ exporting ? '导出中...' : '导出数据' }}
+        </button>
+        <button 
           v-if="!cleaned"
           class="btn btn-outline-success"
           @click="showCleanOptions = true"
@@ -281,6 +288,7 @@
 
 <script>
 import 'bootstrap/dist/css/bootstrap.min.css';
+import axios from 'axios';
 
 export default {
   name: 'DatasetDetail',
@@ -306,6 +314,7 @@ export default {
       cleaning: false,
       cleaningError: null,
       cleaningResult: null,
+      exporting: false,
     }
   },
   computed: {
@@ -633,6 +642,54 @@ export default {
           }
         })
         console.log('从预览数据提取的列信息:', this.columns)
+      }
+    },
+    
+    // 导出数据集
+    async exportDataset() {
+      this.exporting = true;
+      try {
+        // 构建导出URL
+        const baseUrl = process.env.VUE_APP_API_URL || '';
+        const exportUrl = `${baseUrl}/data/datasets/${this.datasetId}/export`;
+        
+        // 使用axios发送请求,指定responseType为blob
+        const response = await axios.get(exportUrl, {
+          responseType: 'blob',
+        });
+        
+        // 创建Blob对象
+        const blob = new Blob([response.data]);
+        
+        // 创建下载链接
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        
+        // 获取文件名
+        const contentDisposition = response.headers['content-disposition'];
+        let filename = this.dataset.name.split('.')[0] + '_exported.' + this.file_type;
+        
+        // 尝试从Content-Disposition头获取文件名
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+          if (filenameMatch && filenameMatch[1]) {
+            filename = filenameMatch[1].replace(/['"]/g, '');
+          }
+        }
+        
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        
+        // 清理资源
+        window.URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('导出数据集时出错:', error);
+        this.$toast?.error?.('导出失败: ' + (error.message || '未知错误'));
+      } finally {
+        this.exporting = false;
       }
     },
   }
